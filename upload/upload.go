@@ -13,22 +13,15 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
-)
 
-const (
-	// URLs
-	loginURL            string = "https://login.bolha.com//novaprijava.php"
-	loginFailedRedirect string = "https://login.bolha.com/"
-	removeURL           string = "https://moja.bolha.com/adManager/ajaxRemoveActiveBulk"
-	categoryURL         string = "http://objava-oglasa.bolha.com/izbor_paketa.php"
-	publishURL          string = "http://objava-oglasa.bolha.com/oddaj.php"
+	log "github.com/sirupsen/logrus"
 )
 
 // Errors returned by Upload package
 var (
 	ErrLoginFailed    = errors.New("login failed")
-	ErrAdNotRemoved   = errors.New("ad not removed")
 	ErrNoMatches      = errors.New("no matches")
 	ErrAdNotPublished = errors.New("ad not published")
 )
@@ -44,10 +37,16 @@ type Ad struct {
 	User        *User    `json:"user"`
 	Title       string   `json:"title"`
 	Description string   `json:"description"`
-	Price       int      `json:"price"`
-	CategoryId  int      `json:"categoryId"`
+	Price       string   `json:"price"`
+	CategoryId  string   `json:"categoryId"`
 	Images      []string `json:"images"`
 }
+
+var (
+	defaultRedirectFunc = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+)
 
 // UploadAd uploads an ad to bolha.com
 func UploadAd(ad *Ad) error {
@@ -57,11 +56,9 @@ func UploadAd(ad *Ad) error {
 		return err
 	}
 	client := &http.Client{
-		Timeout: time.Duration(3) * time.Minute,
-		Jar:     cookieJar,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
+		Timeout:       time.Duration(3) * time.Minute,
+		Jar:           cookieJar,
+		CheckRedirect: defaultRedirectFunc,
 	}
 
 	// log in
@@ -85,64 +82,101 @@ func UploadAd(ad *Ad) error {
 }
 
 func login(client *http.Client, user *User) error {
+	log.WithFields(log.Fields{
+		"username": user.Username,
+		"password": user.Password,
+	}).Info("logging in")
+
+	headers := map[string]string{
+		"Accept":                    "application/json, text/javascript, */*; q=0.01",
+		"Accept-Encoding":           "gzip, deflate, br",
+		"Accept-Language":           "en-US,en;q=0.9,sl;q=0.8,hr;q=0.7",
+		"Cache-Control":             "max-age=0",
+		"Connection":                "keep-alive",
+		"Content-Type":              "application/x-www-form-urlencoded",
+		"Host":                      "login.bolha.com",
+		"Origin":                    "http://www.bolha.com",
+		"Referer":                   "http://www.bolha.com/",
+		"Upgrade-Insecure-Requests": "1",
+		"User-Agent":                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.139 Safari/537.36",
+		"X-Requested-With":          "XMLHttpRequest",
+		"X-Site":                    "http://www.bolha.com/",
+	}
+
 	values := url.Values{
-		"name": {
+		"username": {
 			user.Username,
 		},
-		"geslo": {
+		"password": {
 			user.Password,
 		},
-		"zapomni_me": {
-			"zapomni",
+		"rememberMe": {
+			"true",
 		},
 	}
 
-	res, err := client.PostForm(loginURL, values)
+	req, err := http.NewRequest(http.MethodPost, "https://login.bolha.com/auth.php", strings.NewReader(values.Encode()))
+	if err != nil {
+		return err
+	}
+
+	for k, v := range headers {
+		req.Header.Add(k, v)
+	}
+
+	res, err := client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer res.Body.Close()
 
-	// check if successful
-	if res.StatusCode != http.StatusFound {
+	if res.StatusCode == http.StatusUnauthorized {
 		return ErrLoginFailed
 	}
-	location, err := res.Location()
-	if err != nil {
-		return err
-	}
-	if location.String() == loginFailedRedirect {
-		return ErrLoginFailed
-	}
+
+	log.WithFields(log.Fields{
+		"username": user.Username,
+	}).Info("login successful")
 
 	return nil
 }
 
 func getAdMetaInfo(client *http.Client, ad *Ad) (map[string]string, error) {
+	log.Info("getting meta info")
+
+	headers := map[string]string{
+		"Accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+		"Accept-Encoding":           "identity",
+		"Accept-Language":           "en-US,en;q=0.9,sl;q=0.8,hr;q=0.7",
+		"Cache-Control":             "max-age=0",
+		"Connection":                "keep-alive",
+		"Content-Type":              "application/x-www-form-urlencoded",
+		"Host":                      "objava-oglasa.bolha.com",
+		"Origin":                    "http://objava-oglasa.bolha.com",
+		"Referer":                   "http://objava-oglasa.bolha.com/",
+		"Upgrade-Insecure-Requests": "1",
+		"User-Agent":                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.139 Safari/537.36",
+	}
+
 	values := url.Values{
 		"categoryId": {
-			strconv.Itoa(ad.CategoryId),
+			ad.CategoryId,
 		},
 	}
 
-	if _, err := client.PostForm(categoryURL, values); err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, publishURL, nil)
+	req, err := http.NewRequest(http.MethodPost, "http://objava-oglasa.bolha.com/izbor_paketa.php", strings.NewReader(values.Encode()))
 	if err != nil {
 		return nil, err
 	}
 
-	values = url.Values{
-		"katid": {
-			strconv.Itoa(ad.CategoryId),
-		},
-		"days": {
-			"30",
-		},
+	for k, v := range headers {
+		req.Header.Add(k, v)
 	}
-	req.URL.RawQuery = values.Encode()
+
+	client.CheckRedirect = nil
+	defer func() {
+		client.CheckRedirect = defaultRedirectFunc
+	}()
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -190,10 +224,29 @@ func getAdMetaInfo(client *http.Client, ad *Ad) (map[string]string, error) {
 		matches[k] = string(m[1])
 	}
 
+	log.Info("finished getting meta info")
+
 	return matches, nil
 }
 
 func publishAd(client *http.Client, ad *Ad, metaInfo map[string]string) (int, error) {
+	log.WithFields(log.Fields{
+		"title": ad.Title,
+	}).Info("publishing ad")
+
+	headers := map[string]string{
+		"Accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+		"Accept-Encoding":           "gzip, deflate",
+		"Accept-Language":           "en-US,en;q=0.9,sl;q=0.8,hr;q=0.7",
+		"Cache-Control":             "max-age=0",
+		"Connection":                "keep-alive",
+		"Host":                      "objava-oglasa.bolha.com",
+		"Origin":                    "http://objava-oglasa.bolha.com",
+		"Referer":                   fmt.Sprintf("http://objava-oglasa.bolha.com/oddaj.php?katid=%d&days=30", ad.CategoryId),
+		"Upgrade-Insecure-Requests": "1",
+		"User-Agent":                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.139 Safari/537.36",
+	}
+
 	buff := &bytes.Buffer{}
 	w := multipart.NewWriter(buff)
 	defer w.Close()
@@ -210,8 +263,8 @@ func publishAd(client *http.Client, ad *Ad, metaInfo map[string]string) (int, er
 	params := map[string]string{
 		"cNaziv":     ad.Title,
 		"cOpis":      ad.Description,
-		"nCenaStart": strconv.Itoa(ad.Price),
-		"nKatID":     strconv.Itoa(ad.CategoryId),
+		"nCenaStart": ad.Price,
+		"nKatID":     ad.CategoryId,
 		"cTip":       "O",
 	}
 	for k, v := range params {
@@ -246,11 +299,15 @@ func publishAd(client *http.Client, ad *Ad, metaInfo map[string]string) (int, er
 		return 0, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, publishURL, buff)
+	req, err := http.NewRequest(http.MethodPost, "http://objava-oglasa.bolha.com/oddaj.php", buff)
 	if err != nil {
 		return 0, err
 	}
 	req.Header.Set("Content-Type", w.FormDataContentType())
+
+	for k, v := range headers {
+		req.Header.Add(k, v)
+	}
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -264,15 +321,20 @@ func publishAd(client *http.Client, ad *Ad, metaInfo map[string]string) (int, er
 		return 0, err
 	}
 
-	adIDStr := url.Query().Get("id")
-	if adIDStr == "" {
+	adIdStr := url.Query().Get("id")
+	if adIdStr == "" {
 		return 0, ErrAdNotPublished
 	}
 
-	adID, err := strconv.Atoi(adIDStr)
+	adId, err := strconv.Atoi(adIdStr)
 	if err != nil {
 		return 0, err
 	}
 
-	return adID, nil
+	log.WithFields(log.Fields{
+		"title": ad.Title,
+		"id":    adId,
+	}).Info("published ad")
+
+	return adId, nil
 }
