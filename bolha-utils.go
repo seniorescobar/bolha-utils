@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bolha-utils/client"
 	"flag"
 	"os"
 
@@ -26,14 +27,23 @@ func main() {
 	case "upload":
 		uploadCommand.Parse(os.Args[2:])
 		if uploadCommand.Parsed() {
-			ads, err := getAds(*uploadFilePtr)
+			records, err := getRecords(*uploadFilePtr)
 			if err != nil {
-				log.WithFields(log.Fields{
-					"err": err,
-				}).Fatal("error getting ads")
+				log.WithFields(log.Fields{"err": err}).Fatal("error getting records")
 			}
 
-			uploadAds(ads)
+			for _, record := range records {
+				c, err := client.New(record.user)
+				if err != nil {
+					log.WithFields(log.Fields{"err": err}).Fatal("error creating client")
+				}
+
+				if err := c.RemoveAllAds(); err != nil {
+					log.WithFields(log.Fields{"err": err}).Error("error removing all ads")
+				}
+
+				c.UploadAds(record.ads)
+			}
 		}
 	default:
 		flag.PrintDefaults()
