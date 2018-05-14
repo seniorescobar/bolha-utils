@@ -44,7 +44,7 @@ func main() {
 				}
 
 				ads := make([]*client.Ad, len(record.Ads))
-				for i, ad := range ads {
+				for i, ad := range record.Ads {
 					tmpAd := client.Ad(*ad)
 					ads[i] = &tmpAd
 				}
