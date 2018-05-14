@@ -4,6 +4,7 @@ import (
 	"bolha-utils/client"
 	"flag"
 	"os"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -32,24 +33,34 @@ func main() {
 				log.WithFields(log.Fields{"err": err}).Fatal("error getting records")
 			}
 
-			for _, record := range records {
-				tmpUser := client.User(*record.User)
-				c, err := client.New(&tmpUser)
-				if err != nil {
-					log.WithFields(log.Fields{"err": err}).Fatal("error creating client")
-				}
+			var wg sync.WaitGroup
 
-				if err := c.RemoveAllAds(); err != nil {
-					log.WithFields(log.Fields{"err": err}).Error("error removing all ads")
-				}
+			for _, r := range records {
+				wg.Add(1)
 
-				ads := make([]*client.Ad, len(record.Ads))
-				for i, ad := range record.Ads {
-					tmpAd := client.Ad(*ad)
-					ads[i] = &tmpAd
-				}
+				go func(r *record) {
+					defer wg.Done()
 
-				c.UploadAds(ads)
+					tmpUser := client.User(*r.User)
+					c, err := client.New(&tmpUser)
+					if err != nil {
+						log.WithFields(log.Fields{"err": err}).Fatal("error creating client")
+					}
+
+					if err := c.RemoveAllAds(); err != nil {
+						log.WithFields(log.Fields{"err": err}).Error("error removing all ads")
+					}
+
+					ads := make([]*client.Ad, len(r.Ads))
+					for i, ad := range r.Ads {
+						tmpAd := client.Ad(*ad)
+						ads[i] = &tmpAd
+					}
+
+					c.UploadAds(ads)
+				}(r)
+
+				wg.Wait()
 			}
 		}
 	default:
