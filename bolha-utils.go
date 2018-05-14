@@ -33,7 +33,8 @@ func main() {
 			}
 
 			for _, record := range records {
-				c, err := client.New(record.user)
+				tmpUser := client.User(*record.User)
+				c, err := client.New(&tmpUser)
 				if err != nil {
 					log.WithFields(log.Fields{"err": err}).Fatal("error creating client")
 				}
@@ -42,7 +43,13 @@ func main() {
 					log.WithFields(log.Fields{"err": err}).Error("error removing all ads")
 				}
 
-				c.UploadAds(record.ads)
+				ads := make([]*client.Ad, len(record.Ads))
+				for i, ad := range ads {
+					tmpAd := client.Ad(*ad)
+					ads[i] = &tmpAd
+				}
+
+				c.UploadAds(ads)
 			}
 		}
 	default:
