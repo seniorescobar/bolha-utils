@@ -7,14 +7,9 @@ import (
 	"bolha-utils/client"
 )
 
-type clientRecord struct {
-	user *client.User
-	ads  []*client.Ad
-}
-
 type record struct {
-	User *user `json:"user"`
-	Ads  []*ad `json:"ads"`
+	User user `json:"user"`
+	Ads  []ad `json:"ads"`
 }
 
 type user struct {
@@ -30,42 +25,7 @@ type ad struct {
 	Images      []string `json:"images"`
 }
 
-// func removeAds(users []*upload.User) {
-// 	for _, u := range users {
-// 		if err := upload.RemoveAllAds(u); err != nil {
-// 			log.WithFields(log.Fields{
-// 				"err": err,
-// 			}).Error("error removing ads")
-// 		}
-// 	}
-// }
-
-// func uploadAds(records []*upload.Record) {
-// 	var wg sync.WaitGroup
-// 	wg.Add(len(ads))
-
-// 	errChan := make(chan error)
-
-// 	for _, ad := range ads {
-// 		go func() {
-// 			if err := upload.UploadAd(ad); err != nil {
-// 				errChan <- err
-// 			}
-// 			wg.Done()
-// 		}()
-// 	}
-
-// 	go func() {
-// 		wg.Wait()
-// 		close(errChan)
-// 	}()
-
-// 	for err := range errChan {
-// 		log.Error(err)
-// 	}
-// }
-
-func getRecords(filename string) ([]*clientRecord, error) {
+func getRecords(filename string) ([]client.Record, error) {
 	raw, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil, err
@@ -74,36 +34,22 @@ func getRecords(filename string) ([]*clientRecord, error) {
 	records := make([]record, 0)
 	json.Unmarshal(raw, &records)
 
-	recordsPtr := make([]*record, len(records))
+	clientRecords := make([]client.Record, len(records))
 	for i, r := range records {
-		recordsPtr[i] = &r
-	}
-
-	return mapRecords(recordsPtr), nil
-}
-
-func mapRecords(records []*record) []*clientRecord {
-	clientRecords := make([]*clientRecord, len(records))
-
-	for i, r := range records {
-		clientRecords[i] = &clientRecord{
-			user: &client.User{
-				Username: r.User.Username,
-				Password: r.User.Password,
-			},
-			ads: make([]*client.Ad, len(r.Ads)),
+		castUser := client.User(r.User)
+		castAds := make([]*client.Ad, len(r.Ads))
+		for j, a := range r.Ads {
+			castAd := client.Ad(a)
+			castAds[j] = &castAd
 		}
 
-		for j, ad := range r.Ads {
-			clientRecords[i].ads[j] = &client.Ad{
-				Title:       ad.Title,
-				Description: ad.Description,
-				Price:       ad.Price,
-				CategoryId:  ad.CategoryId,
-				Images:      ad.Images,
-			}
+		newR := client.Record{
+			User: &castUser,
+			Ads:  castAds,
 		}
+
+		clientRecords[i] = newR
 	}
 
-	return clientRecords
+	return clientRecords, nil
 }

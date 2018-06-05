@@ -32,8 +32,8 @@ func main() {
 				log.WithFields(log.Fields{"err": err}).Fatal("error getting records")
 			}
 
-			for _, record := range records {
-				c, err := client.New(record.user)
+			for _, r := range records {
+				c, err := client.New(r.User)
 				if err != nil {
 					log.WithFields(log.Fields{"err": err}).Fatal("error creating client")
 				}
@@ -42,7 +42,7 @@ func main() {
 					log.WithFields(log.Fields{"err": err}).Error("error removing all ads")
 				}
 
-				c.UploadAds(record.ads)
+				c.UploadAds(r.Ads)
 			}
 		}
 	default:

@@ -18,6 +18,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// Record represents a record consisting of user and ads
+type Record struct {
+	User *User
+	Ads  []*Ad
+}
+
 // User represents a user of bolha.com
 type User struct {
 	Username string
