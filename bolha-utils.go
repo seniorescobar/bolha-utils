@@ -2,7 +2,9 @@ package main
 
 import (
 	"bolha-utils/client"
+	"encoding/json"
 	"flag"
+	"io/ioutil"
 	"os"
 	"sync"
 
@@ -34,13 +36,15 @@ func main() {
 			}
 
 			var wg sync.WaitGroup
-			wg.Add(len(records))
 
 			for _, r := range records {
-				go func(wg *sync.WaitGroup, r client.Record) {
+				wg.Add(1)
+
+				go func(r *record) {
 					defer wg.Done()
 
-					c, err := client.New(r.User)
+					tmpUser := client.User(*r.User)
+					c, err := client.New(&tmpUser)
 					if err != nil {
 						log.WithFields(log.Fields{"err": err}).Fatal("error creating client")
 					}
@@ -49,14 +53,56 @@ func main() {
 						log.WithFields(log.Fields{"err": err}).Error("error removing all ads")
 					}
 
-					c.UploadAds(r.Ads)
-				}(&wg, r)
-			}
+					ads := make([]*client.Ad, len(r.Ads))
+					for i, ad := range r.Ads {
+						tmpAd := client.Ad(*ad)
+						ads[i] = &tmpAd
+					}
 
-			wg.Wait()
+					c.UploadAds(ads)
+				}(r)
+
+				wg.Wait()
+			}
 		}
 	default:
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
+}
+
+// UPLOAD
+type record struct {
+	User *user `json:"user"`
+	Ads  []*ad `json:"ads"`
+}
+
+type user struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type ad struct {
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Price       string   `json:"price"`
+	CategoryId  string   `json:"categoryId"`
+	Images      []string `json:"images"`
+}
+
+func getRecords(filename string) ([]*record, error) {
+	raw, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	records := make([]record, 0)
+	json.Unmarshal(raw, &records)
+
+	recordsPtr := make([]*record, len(records))
+	for i, r := range records {
+		recordsPtr[i] = &r
+	}
+
+	return recordsPtr, nil
 }
