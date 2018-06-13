@@ -2,6 +2,7 @@ package main
 
 import (
 	"bolha-utils/client"
+	"bolha-utils/find"
 	"encoding/json"
 	"flag"
 	"io/ioutil"
@@ -64,6 +65,25 @@ func main() {
 
 				wg.Wait()
 			}
+		}
+	case "find":
+		pattern := `(?s:<div class="ad">.+?title="(?P<Title>.*?)".+?href="(?P<Link>.+?)".+?<div class="price"><span>(?P<Price>\d+))`
+		url := `http://www.bolha.com/racunalnistvo/igricarstvo-gaming/xbox/xbox-one/?location=Osrednjeslovenska%2F&hasImages=Oglasi+s+fotografijami&datePlaced=Zadnji+teden`
+
+		bolhaScraper, err := find.New(pattern)
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		found, err := bolhaScraper.Find(url, func(*find.Ad) bool {
+			return false
+		})
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		for _, f := range found {
+			log.Println(f)
 		}
 	default:
 		flag.PrintDefaults()
