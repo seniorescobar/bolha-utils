@@ -155,7 +155,7 @@ func (c *Client) removeAds(ids []string) error {
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return errors.New("ad not removed")
+		return errors.New("ads not removed")
 	}
 
 	return nil
