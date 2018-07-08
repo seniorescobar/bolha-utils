@@ -223,7 +223,7 @@ func (c *Client) logIn(u *User) error {
 	defer res.Body.Close()
 
 	if res.StatusCode == http.StatusUnauthorized {
-		return errors.New("login failed")
+		return fmt.Errorf("login failed for '%s' ('%s')", u.Username, u.Password)
 	}
 
 	return nil

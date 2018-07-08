@@ -72,8 +72,8 @@ func getRecords(filename string) ([]*record, error) {
 	json.Unmarshal(raw, &records)
 
 	recordsPtr := make([]*record, len(records))
-	for i, r := range records {
-		recordsPtr[i] = &r
+	for i := range records {
+		recordsPtr[i] = &records[i]
 	}
 
 	return recordsPtr, nil
@@ -91,7 +91,8 @@ func uploadHelper(records []*record) {
 			cUser := client.User(*r.User)
 			c, err := client.New(&cUser)
 			if err != nil {
-				log.WithFields(log.Fields{"err": err}).Fatal("error creating client")
+				log.WithFields(log.Fields{"err": err}).Error("error creating client")
+				return
 			}
 
 			if err := c.RemoveAllAds(); err != nil {
@@ -106,7 +107,7 @@ func uploadHelper(records []*record) {
 
 			c.UploadAds(ads)
 		}(r)
-
-		wg.Wait()
 	}
+
+	wg.Wait()
 }
