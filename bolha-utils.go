@@ -35,35 +35,7 @@ func main() {
 				log.WithFields(log.Fields{"err": err}).Fatal("error getting records")
 			}
 
-			var wg sync.WaitGroup
-
-			for _, r := range records {
-				wg.Add(1)
-
-				go func(r *record) {
-					defer wg.Done()
-
-					tmpUser := client.User(*r.User)
-					c, err := client.New(&tmpUser)
-					if err != nil {
-						log.WithFields(log.Fields{"err": err}).Fatal("error creating client")
-					}
-
-					if err := c.RemoveAllAds(); err != nil {
-						log.WithFields(log.Fields{"err": err}).Error("error removing all ads")
-					}
-
-					ads := make([]*client.Ad, len(r.Ads))
-					for i, ad := range r.Ads {
-						tmpAd := client.Ad(*ad)
-						ads[i] = &tmpAd
-					}
-
-					c.UploadAds(ads)
-				}(r)
-
-				wg.Wait()
-			}
+			uploadHelper(records)
 		}
 	default:
 		flag.PrintDefaults()
@@ -105,4 +77,36 @@ func getRecords(filename string) ([]*record, error) {
 	}
 
 	return recordsPtr, nil
+}
+
+func uploadHelper(records []*record) {
+	var wg sync.WaitGroup
+
+	for _, r := range records {
+		wg.Add(1)
+
+		go func(r *record) {
+			defer wg.Done()
+
+			cUser := client.User(*r.User)
+			c, err := client.New(&cUser)
+			if err != nil {
+				log.WithFields(log.Fields{"err": err}).Fatal("error creating client")
+			}
+
+			if err := c.RemoveAllAds(); err != nil {
+				log.WithFields(log.Fields{"err": err}).Error("error removing all ads")
+			}
+
+			ads := make([]*client.Ad, len(r.Ads))
+			for i, ad := range r.Ads {
+				tmpAd := client.Ad(*ad)
+				ads[i] = &tmpAd
+			}
+
+			c.UploadAds(ads)
+		}(r)
+
+		wg.Wait()
+	}
 }
