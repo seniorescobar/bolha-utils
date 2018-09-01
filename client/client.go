@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
+	"image"
+	"image/png"
 	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"net/http/cookiejar"
+	"net/textproto"
 	"net/url"
 	"os"
 	"regexp"
@@ -376,31 +378,22 @@ func (c *Client) publishAd(ad *Ad, metaInfo map[string]string) error {
 		}
 	}
 
-	// write images
-	for i, image := range ad.Images {
-		f, err := os.Open(image)
+	// upload images
+	for _, img := range ad.Images {
+		imgId, err := c.uploadImage(&ad.CategoryId, img)
 		if err != nil {
 			return err
 		}
 
-		part, err := w.CreateFormFile(fmt.Sprintf("aSlikeUpload[%d]", i), image)
-		if err != nil {
+		if err := w.WriteField("images[][id]", imgId); err != nil {
 			return err
 		}
 
-		if _, err = io.Copy(part, f); err != nil {
-			return err
-		}
-
-		if err := f.Close(); err != nil {
+		if err := w.WriteField("izd_slike_order[]", imgId); err != nil {
 			return err
 		}
 	}
-
-	// last image needs to be empty
-	if _, err := w.CreateFormFile(fmt.Sprintf("aSlikeUpload[%d]", len(ad.Images)), ""); err != nil {
-		return err
-	}
+	return nil
 
 	req, err := http.NewRequest(http.MethodPost, "http://objava-oglasa.bolha.com/oddaj.php", buff)
 	if err != nil {
@@ -429,6 +422,72 @@ func (c *Client) publishAd(ad *Ad, metaInfo map[string]string) error {
 	defer res.Body.Close()
 
 	return nil
+}
+
+func (c *Client) uploadImage(categoryId *string, imgPath string) (string, error) {
+	buff := &bytes.Buffer{}
+	w := multipart.NewWriter(buff)
+	defer w.Close()
+
+	req, err := http.NewRequest(http.MethodPost, "http://objava-oglasa.bolha.com/include/imageUploaderProxy.php", buff)
+	if err != nil {
+		return "", err
+	}
+
+	headers := map[string]string{
+		"Host":             "objava-oglasa.bolha.com",
+		"Connection":       "keep-alive",
+		"Pragma":           "no-cache",
+		"Cache-Control":    "no-cache",
+		"Origin":           "http://objava-oglasa.bolha.com",
+		"User-Agent":       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.106 Safari/537.36",
+		"Accept":           "*/*",
+		"X-Requested-With": "XMLHttpRequest",
+		"Referer":          fmt.Sprintf("http://objava-oglasa.bolha.com/oddaj.php?katid=%s&days=30", *categoryId),
+		"Accept-Encoding":  "deflate",
+		"Accept-Language":  "en-US,en;q=0.9",
+	}
+	req.Header["MEDIA-ACTION"] = []string{"save-to-mrs"}
+	for k, v := range headers {
+		req.Header.Add(k, v)
+	}
+
+	f, err := os.Open(imgPath)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	img, _, err := image.Decode(f)
+	if err != nil {
+		return "", err
+	}
+
+	h := make(textproto.MIMEHeader)
+	h.Set("Content-Disposition", `form-data; name="file"; filename="imagename"`)
+	h.Set("Content-Type", "image/png")
+
+	part, err := w.CreatePart(h)
+	if err != nil {
+		return "", err
+	}
+
+	if err := png.Encode(part, img); err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Content-Type", w.FormDataContentType())
+
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+
+	// TODO extract id from response
+	imgId := ""
+
+	return imgId, nil
 }
 
 func getDefaultHeaders(overwrite map[string]string) map[string]string {
