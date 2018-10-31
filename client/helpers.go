@@ -51,7 +51,6 @@ func (c *Client) uploadAd(ad *Ad) error {
 	if err != nil {
 		return err
 	}
-	log.WithFields(log.Fields{"metainfo": metaInfo}).Info("metainfo")
 
 	return c.publishAd(ad, metaInfo)
 }
@@ -72,14 +71,8 @@ func (c *Client) removeAds(ids []string) error {
 		return err
 	}
 
-	addHeaders(req, map[string]string{
-		"Content-Type":              "application/x-www-form-urlencoded",
-		"Host":                      "moja.bolha.com",
-		"Origin":                    "https://moja.bolha.com",
-		"Referer":                   "https://moja.bolha.com/oglasi",
-		"Upgrade-Insecure-Requests": "1",
-		"X-Requested-With":          "XMLHttpRequest",
-	})
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 
 	res, err := c.httpClient.Do(req)
 	if err != nil {
@@ -124,15 +117,9 @@ func (c *Client) logIn(username, password string) error {
 		return err
 	}
 
-	addHeaders(req, map[string]string{
-		"Content-Type":              "application/x-www-form-urlencoded",
-		"Host":                      "login.bolha.com",
-		"Origin":                    "http://www.bolha.com",
-		"Referer":                   "http://www.bolha.com/",
-		"Upgrade-Insecure-Requests": "1",
-		"X-Requested-With":          "XMLHttpRequest",
-		"X-Site":                    "http://www.bolha.com/",
-	})
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	req.Header.Set("X-Site", "http://www.bolha.com/")
 
 	res, err := c.httpClient.Do(req)
 	if err != nil {
@@ -152,11 +139,6 @@ func (c *Client) getAdIds() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	addHeaders(req, map[string]string{
-		"Host": "moja.bolha.com",
-		"Upgrade-Insecure-Requests": "1",
-	})
 
 	res, err := c.httpClient.Do(req)
 	if err != nil {
@@ -195,13 +177,7 @@ func (c *Client) getAdMetaInfo(ad *Ad) (map[string]string, error) {
 		return nil, err
 	}
 
-	addHeaders(req, map[string]string{
-		"Content-Type":              "application/x-www-form-urlencoded",
-		"Host":                      "objava-oglasa.bolha.com",
-		"Origin":                    "http://objava-oglasa.bolha.com",
-		"Referer":                   "http://objava-oglasa.bolha.com/",
-		"Upgrade-Insecure-Requests": "1",
-	})
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	res, err := c.httpClient.Do(req)
 	if err != nil {
@@ -310,13 +286,6 @@ func (c *Client) publishAd(ad *Ad, metaInfo map[string]string) error {
 		return err
 	}
 
-	addHeaders(req, map[string]string{
-		"Host":                      "objava-oglasa.bolha.com",
-		"Origin":                    "http://objava-oglasa.bolha.com",
-		"Referer":                   fmt.Sprintf("http://objava-oglasa.bolha.com/oddaj.php?katid=%d&days=30", ad.CategoryId),
-		"Upgrade-Insecure-Requests": "1",
-	})
-
 	req.Header.Set("Content-Type", w.FormDataContentType())
 
 	res, err := c.httpClient.Do(req)
@@ -326,10 +295,4 @@ func (c *Client) publishAd(ad *Ad, metaInfo map[string]string) error {
 	defer res.Body.Close()
 
 	return nil
-}
-
-func addHeaders(req *http.Request, headers map[string]string) {
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
 }
