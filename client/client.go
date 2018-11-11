@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	_ "image/jpeg"
 	"image/png"
 	"io/ioutil"
 	"mime/multipart"
@@ -18,6 +19,10 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+)
+
+var (
+	regexImageId = `"id":"([a-z0-9\-]*)"`
 )
 
 // Record represents a record consisting of user and ads
@@ -238,7 +243,7 @@ func (c *Client) getAdIds() ([]string, error) {
 	}
 
 	overwrite := map[string]string{
-		"Host": "moja.bolha.com",
+		"Host":                      "moja.bolha.com",
 		"Upgrade-Insecure-Requests": "1",
 	}
 	headers := getDefaultHeaders(overwrite)
@@ -393,7 +398,6 @@ func (c *Client) publishAd(ad *Ad, metaInfo map[string]string) error {
 			return err
 		}
 	}
-	return nil
 
 	req, err := http.NewRequest(http.MethodPost, "http://objava-oglasa.bolha.com/oddaj.php", buff)
 	if err != nil {
@@ -427,30 +431,6 @@ func (c *Client) publishAd(ad *Ad, metaInfo map[string]string) error {
 func (c *Client) uploadImage(categoryId *string, imgPath string) (string, error) {
 	buff := &bytes.Buffer{}
 	w := multipart.NewWriter(buff)
-	defer w.Close()
-
-	req, err := http.NewRequest(http.MethodPost, "http://objava-oglasa.bolha.com/include/imageUploaderProxy.php", buff)
-	if err != nil {
-		return "", err
-	}
-
-	headers := map[string]string{
-		"Host":             "objava-oglasa.bolha.com",
-		"Connection":       "keep-alive",
-		"Pragma":           "no-cache",
-		"Cache-Control":    "no-cache",
-		"Origin":           "http://objava-oglasa.bolha.com",
-		"User-Agent":       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.106 Safari/537.36",
-		"Accept":           "*/*",
-		"X-Requested-With": "XMLHttpRequest",
-		"Referer":          fmt.Sprintf("http://objava-oglasa.bolha.com/oddaj.php?katid=%s&days=30", *categoryId),
-		"Accept-Encoding":  "deflate",
-		"Accept-Language":  "en-US,en;q=0.9",
-	}
-	req.Header["MEDIA-ACTION"] = []string{"save-to-mrs"}
-	for k, v := range headers {
-		req.Header.Add(k, v)
-	}
 
 	f, err := os.Open(imgPath)
 	if err != nil {
@@ -476,6 +456,30 @@ func (c *Client) uploadImage(categoryId *string, imgPath string) (string, error)
 		return "", err
 	}
 
+	w.Close()
+
+	req, err := http.NewRequest(http.MethodPost, "http://objava-oglasa.bolha.com/include/imageUploaderProxy.php", buff)
+	if err != nil {
+		return "", err
+	}
+
+	headers := map[string]string{
+		"Host":             "objava-oglasa.bolha.com",
+		"Connection":       "keep-alive",
+		"Pragma":           "no-cache",
+		"Cache-Control":    "no-cache",
+		"Origin":           "http://objava-oglasa.bolha.com",
+		"User-Agent":       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.106 Safari/537.36",
+		"Accept":           "*/*",
+		"X-Requested-With": "XMLHttpRequest",
+		"Referer":          fmt.Sprintf("http://objava-oglasa.bolha.com/oddaj.php?katid=%s&days=30", *categoryId),
+		"Accept-Encoding":  "deflate",
+		"Accept-Language":  "en-US,en;q=0.9",
+	}
+	req.Header["MEDIA-ACTION"] = []string{"save-to-mrs"} // special case, TODO: check if it works lowercase
+	for k, v := range headers {
+		req.Header.Add(k, v)
+	}
 	req.Header.Set("Content-Type", w.FormDataContentType())
 
 	res, err := c.httpClient.Do(req)
@@ -484,9 +488,18 @@ func (c *Client) uploadImage(categoryId *string, imgPath string) (string, error)
 	}
 	defer res.Body.Close()
 
-	// TODO extract id from response
-	imgId := ""
+	resBody, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return "", err
+	}
 
+	r := regexp.MustCompile(regexImageId)
+	m := r.FindSubmatch(resBody)
+	if len(m) < 2 {
+		return "", errors.New("could not extract uploaded image id")
+	}
+
+	imgId := string(m[1])
 	return imgId, nil
 }
 
