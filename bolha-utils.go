@@ -1,12 +1,13 @@
 package main
 
 import (
-	"bolha-utils/client"
 	"encoding/json"
 	"flag"
 	"io/ioutil"
 	"os"
 	"sync"
+
+	"github.com/seniorescobar/bolha-utils/client"
 
 	log "github.com/sirupsen/logrus"
 )
